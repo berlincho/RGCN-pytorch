@@ -142,6 +142,19 @@ def load_data(dataset_str='aifb', K=2, limit=-1):
         test_file = 'data/bgs/testSet(lith).tsv'
         label_header = 'label_lithogenesis'
         nodes_header = 'rock'
+    elif dataset_str == 'am':
+        data_url = 'https://www.dropbox.com/s/htisydfgwxmrx65/am_stripped.nt.gz?dl=1'
+        graph_file = 'data/am/am_stripped.nt.gz'
+
+        if not os.path.isfile(graph_file):
+            print('Downloading AM data.')
+            wget.download(data_url, graph_file)
+
+        task_file = 'data/am/completeDataset.tsv'
+        train_file = 'data/am/trainingSet.tsv'
+        test_file = 'data/am/testSet.tsv'
+        label_header = 'label_cateogory'
+        nodes_header = 'proxy'
 
     else:
         raise NameError('Dataset name not recognized: ' + dataset_str)
