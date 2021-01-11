@@ -2,13 +2,6 @@
 # coding: utf-8
 
 import math
-
-import torch
-
-from torch.nn.parameter import Parameter
-from torch.nn.modules.module import Module
-
-import math
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter
