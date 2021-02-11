@@ -182,7 +182,6 @@ def load_data(dataset_str='aifb', K=2, limit=-1):
     nodes_file = dirname + '/' + nodes_file
 
     adj_files = glob.glob(adj_fprepend + '*.npz')
-
     if adj_files != [] and os.path.isfile(labels_file) and \
             os.path.isfile(train_idx_file) and os.path.isfile(test_idx_file):
 

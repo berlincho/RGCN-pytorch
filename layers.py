@@ -44,22 +44,22 @@ class RelationalGraphConvLayer(Module):
             nn.init.xavier_uniform_(self.bias.data)
         
     def forward(self, A, X):
-        
+        X = X.cuda() if X is not None and self.cuda else X
         self.w = torch.einsum('rb, bio -> rio', (self.w_rel, self.w_bases)) if self.num_bases > 0 else self.w
+        weights = self.w.view(self.w.shape[0] * self.w.shape[1], self.w.shape[2]) #shape(r*input_size, output_size)
         # Each relations * Weight
         supports = []
-        for i in range(len(A)):
-            if X is not None: 
-                if self.cuda:
-                    supports.append(torch.mm(torch.sparse.mm(csr2tensor(A[i], self.cuda), X.cuda()), self.w[i]))
-                else:
-                    supports.append(torch.mm(torch.sparse.mm(csr2tensor(A[i], self.cuda), X), self.w[i]))
+        for i in range(self.num_rel):
+            if X is not None:  
+                supports.append(torch.sparse.mm(csr2tensor(A[i], self.cuda), X))
             else:
-                supports.append(torch.mm(csr2tensor(A[i], self.cuda), self.w[i]))
-        out = torch.stack(supports, dim=0).sum(0)
+                supports.append(csr2tensor(A[i], self.cuda))
+
+        tmp = torch.cat(supports, dim=1)
+        out = torch.mm(tmp.float(), weights) #shape(#node, output_size)
+
         if self.bias is not None:
             out += self.bias.unsqueeze(0)
-        
         return out
 
         

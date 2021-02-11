@@ -1,141 +1,148 @@
+import time
 import os
-from models import *
-from data_utils import *
-from scipy.sparse import identity
-import logging
+import numpy as np
+import pickle as pkl
+
 import torch
-import argparse
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 import warnings
-# import EarlyStopping
+from models import RelationalGraphConvModel
+from data_utils import load_data
+from utils import row_normalize, accuracy, get_splits
+from params import args
 from pytorchtools import EarlyStopping
 warnings.filterwarnings('ignore')
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--no_cuda', action='store_true', default=False,
-                    help='Enables CUDA training.')
-parser.add_argument('--validation', action='store_true', default=False,
-                    help='Run validation data.')
-#parser.add_argument('--seed', type=int, default=15, help='Random seed.')
-parser.add_argument('--epochs', type=int, default=50,
-                    help='Number of epochs to train.')
-parser.add_argument('--lr', type=float, default=0.001,
-                    help='Initial learning rate.')
-parser.add_argument('--l2', type=float, default=5e-4,
-                    help='Weight decay (L2 loss on parameters).')
-parser.add_argument('--hop', type=int, default=2,
-                    help='Number of hops.')
-parser.add_argument('--drop', type=float, default=0,
-                    help='Dropout of SAHO')
-parser.add_argument('--hidden', type=int, default=32,
-                    help='Number of hidden units.')
-parser.add_argument('--bases', type=int, default=30,
-                    help='R-GCN bases')
-parser.add_argument('--data', type=str, default="mutag",
-                    help='dataset.')
-args = parser.parse_args()
-print(args)
-args.using_cuda = not args.no_cuda and torch.cuda.is_available()
-if args.using_cuda:
-    import torch.backends.cudnn as cudnn
-    cudnn.benchmark = True
+class Train:
+    def __init__(self, args):
+        self.args = args
+        self.best_val = 0
+        # Load data
+        self.A, self.y, self.train_idx, self.test_idx = self.input_data()
+        self.num_nodes = self.A[0].shape[0]
+        self.num_rel = len(self.A)
+        self.labels = torch.LongTensor(np.array(np.argmax(self.y, axis=-1)).squeeze())
+        
+        # Get dataset splits
+        self.y_train, self.y_val, self.y_test, self.idx_train, self.idx_val, self.idx_test = get_splits(self.y, self.train_idx, self.test_idx, self.args.validation)
 
-def input_data(dirname='./data'):
-    data = None
-    if os.path.isfile(dirname + '/' + args.data + '_' + str(args.hop) + '.pickle'):
-        with open(dirname + '/' + args.data + '_' + str(args.hop) + '.pickle', 'rb') as f:
-            data = pkl.load(f)
-    else:
-        with open(dirname + '/' + args.data + '_' + str(args.hop) + '.pickle', 'wb') as f:
-            # Data Loading...    
-            A, X, y, labeled_nodes_idx, train_idx, test_idx, rel_dict, train_names, test_names = load_data(args.data, args.hop)
-            data = {'A': A,
+        # Adjacency matrix normalization
+        self.A = row_normalize(self.A)
+        
+        # Create Model
+        self.model = RelationalGraphConvModel(input_size=self.num_nodes, hidden_size=self.args.hidden, output_size=self.y_train.shape[1], num_bases=self.args.bases, num_rel=self.num_rel, num_layer=2, dropout=self.args.drop, featureless=True, cuda=self.args.using_cuda)
+        print('Loaded %s dataset with %d entities, %d relations and %d classes' % (self.args.data, self.num_nodes, self.num_rel, self.y_train.shape[1]))
+        
+        # Loss and optimizer
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.args.lr, weight_decay=self.args.l2) 
+        
+        # initialize the early_stopping object
+        if self.args.validation:
+            self.early_stopping = EarlyStopping(patience=10, verbose=True)
+
+        if self.args.using_cuda:
+            print("Using the GPU")
+            self.model.cuda()
+            self.labels = self.labels.cuda()
+            
+    def input_data(self, dirname='./data'):
+        data = None
+        if os.path.isfile(dirname + '/' + self.args.data + '_' + str(self.args.hop) + '.pickle'):
+            with open(dirname + '/' + self.args.data + '_' + str(self.args.hop) + '.pickle', 'rb') as f:
+                data = pkl.load(f)
+        else:
+            with open(dirname + '/' + self.args.data + '_' + str(self.args.hop) + '.pickle', 'wb') as f:
+                # Data Loading...    
+                A, X, y, labeled_nodes_idx, train_idx, test_idx, rel_dict, train_names, test_names = load_data(self.args.data, self.args.hop)
+                data = {
+                    'A': A,
                     'y': y,
                     'train_idx': train_idx,
                     'test_idx': test_idx,
-            }
-            pkl.dump(data, f, pkl.HIGHEST_PROTOCOL)
-    return data['A'], data['y'], data['train_idx'], data['test_idx']
-
-# Load Data
-A, y, train_idx, test_idx = input_data()
-# Get dataset splits
-y_train, y_val, y_test, idx_train, idx_val, idx_test = get_splits(y, train_idx, test_idx, args.validation)
-num_nodes = A[0].shape[0]
-num_rel = len(A)
-
-# Adjacency matrix normalization
-A = row_normalize(A)
-
-# Create Model
-model = RelationalGraphConvModel(input_size=num_nodes, hidden_size=args.hidden, output_size=y_train.shape[1], num_bases=args.bases, num_rel=num_rel, num_layer=2, dropout=args.drop, featureless=True, cuda=args.using_cuda)
-print('Loaded %s dataset with %d entities, %d relations and %d classes' % (args.data, num_nodes, num_rel, y_train.shape[1]))
+                }
+                pkl.dump(data, f, pkl.HIGHEST_PROTOCOL)
+        return data['A'], data['y'], data['train_idx'], data['test_idx']
+    
+    def train(self, epoch):  
+        t = time.time()
+        X = None # featureless
+        # Start training
+        self.model.train()
+        emb_train = self.model(A=self.A, X=None)
+        loss = self.criterion(emb_train[self.idx_train], self.labels[self.idx_train])
+        # Backward and optimize
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
         
-# Loss and optimizer
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2) 
+        print ("Epoch: {epoch}, Training Loss on {num} training data: {loss}".format(epoch=epoch, num=len(self.idx_train), loss=str(loss.item())))
 
-# initialize the early_stopping object
-early_stopping = EarlyStopping(patience=10, verbose=True)
-
-if args.using_cuda:
-    print("Using the GPU")
-    model.cuda()
-
-    
-test_loss = []
-test_acc = []
-X = None
-# Start training
-for i in range(args.epochs):
-    model.train()
-    emb_train = model(A, X)
-    scores = emb_train[idx_train]
-    labels_train = torch.LongTensor(np.array(np.argmax(y_train[idx_train], axis=-1)).squeeze())
-    labels_train = labels_train.cuda() if args.using_cuda else labels_train
-    loss = criterion(scores, labels_train)
-    print ("Epoch: {epoch}, Training Loss on {num} training data: {loss}".format(epoch=i, num=len(idx_train), loss=str(loss.item())))
-    
-    # Backward and optimize
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    
-    # Do validation
-    if args.validation:
-        print("----------------------")
-        model.eval()
-        with torch.no_grad():
-            correct = 0
-            emb_val = model(A, X)
-            scores = emb_val[idx_val]
-            _, predicted = torch.max(scores.data, 1)
-            labels_valid = torch.LongTensor(np.array(np.argmax(y_val[idx_val], axis=-1)).squeeze())
-            labels_valid = labels_valid.cuda() if args.using_cuda else labels_valid
-            correct += (predicted == labels_valid).sum().item()
-            print('    Accuracy of the network on the {num} validation data: {acc} %'.format(num=len(idx_val), acc=100* correct / labels_valid.size(0)))
-
-    # Do Testing
-    if not args.validation:
-        print("----------------------")
-        model.eval()
-        with torch.no_grad():
-            correct = 0
-            emb_test = model(A, X)
-            scores = emb_test[idx_test]
-            _, predicted = torch.max(scores.data, 1)
-            labels_test = torch.LongTensor(np.array(np.argmax(y_test[idx_test], axis=-1)).squeeze())
-            labels_test = labels_test.cuda() if args.using_cuda else labels_test
-            correct += (predicted == labels_test).sum().item()
-            loss = criterion(scores, labels_test)
-            acc = 100* correct / labels_test.size(0)
-            test_loss.append(loss.item())
-            test_acc.append(acc)
-            print('Accuracy of the network on the {num} test data: {acc} %, loss: {loss}'.format(num=len(idx_test), acc=acc, loss=loss.item()))   
+        if self.args.validation:
+            # Evaluate validation set performance separately,
+            # deactivates dropout during validation run.
+            with torch.no_grad():
+                self.model.eval()
+                emb_valid = self.model(A=self.A, X=None)
+                loss_val = self.criterion(emb_valid[self.idx_val], self.labels[self.idx_val])
+                acc_val = accuracy(emb_valid[self.idx_val], self.labels[self.idx_val])
+                if acc_val >= self.best_val:
+                    self.best_val = acc_val
+                    self.model_state = {
+                        'state_dict': self.model.state_dict(),
+                        'best_val': acc_val,
+                        'best_epoch': epoch,
+                        'optimizer': self.optimizer.state_dict(),
+                    }
+                print('loss_val: {:.4f}'.format(loss_val.item()),
+                  'acc_val: {:.4f}'.format(acc_val.item()),
+                  'time: {:.4f}s'.format(time.time() - t))
+                print('\n')
+                    
+                self.early_stopping(loss_val, self.model)
+                if self.early_stopping.early_stop:
+                    print("Early stopping")
+                    self.model_state = {
+                        'state_dict': self.model.state_dict(),
+                        'best_val': acc_val,
+                        'best_epoch': epoch,
+                        'optimizer': self.optimizer.state_dict(),
+                    }
+                    return False
+        return True
             
-            #if early_stopping, it will make a checkpoint of the current model
-            early_stopping(loss, model)
+    def test(self):
+        with torch.no_grad():
+            self.model.eval()
+            emb_test = self.model(A=self.A, X=None)
+            loss_test = self.criterion(emb_test[self.idx_test], self.labels[self.idx_test])
+            acc_test = accuracy(emb_test[self.idx_test], self.labels[self.idx_test])
+            print('Accuracy of the network on the {num} test data: {acc} %, loss: {loss}'.format(num=len(self.idx_test), acc=acc_test*100, loss=loss_test.item())) 
+            
+    def save_checkpoint(self, filename='./.checkpoints/'+args.name):
+        print('Save model...')
+        if not os.path.exists('.checkpoints'):
+            os.makedirs('.checkpoints')
+        torch.save(self.model_state, filename)
+        print('Successfully saved model\n...')
 
-            if early_stopping.early_stop:
-                print("Early stopping")
-                break
-    
+    def load_checkpoint(self, filename='./.checkpoints/'+args.name, ts='teacher'):
+        print('Load model...')
+        load_state = torch.load(filename)
+        self.model.load_state_dict(load_state['state_dict'])
+        self.optimizer.load_state_dict(load_state['optimizer'])
+        print('Successfully Loaded model\n...')
+        print("Best Epoch:", load_state['best_epoch'])
+        print("Best acc_val:", load_state['best_val'].item())
+        
+if __name__ == '__main__':
+    train = Train(args)
+    for epoch in range(args.epochs):
+        if train.train(epoch) is False:
+            break  
+    if args.validation:
+        train.save_checkpoint()
+        train.load_checkpoint()
+    train.test()

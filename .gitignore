@@ -104,3 +104,4 @@ ENV/
 
 #other
 scripts.txt
+.checkpoints/

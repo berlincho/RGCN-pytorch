@@ -139,7 +139,7 @@ def get_splits(y, train_idx, test_idx, validation=True):
         val_num = int(len(train_idx) // 5)
         idx_train = train_idx[val_num:]
         idx_val = train_idx[:val_num]
-        idx_test = idx_val  # report final score on validation set for hyperparameter optimization
+        idx_test = test_idx  # report final score on validation set for hyperparameter optimization
     
     else:
         idx_train = train_idx
@@ -188,3 +188,9 @@ def row_normalize(AA):
         D_inv = sp.diags(d_inv)
         A_list.append(D_inv.dot(AA[i]).tocsr())
     return A_list
+
+def accuracy(output, labels):
+    preds = output.max(1)[1].type_as(labels)
+    correct = preds.eq(labels).double()
+    correct = correct.sum()
+    return correct / len(labels)
