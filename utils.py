@@ -140,7 +140,7 @@ def get_splits(y, train_idx, test_idx, validation=True):
         idx_train = train_idx[val_num:]
         idx_val = train_idx[:val_num]
         idx_test = test_idx  # report final score on validation set for hyperparameter optimization
-    
+
     else:
         idx_train = train_idx
         idx_val = train_idx  # no validation
@@ -174,20 +174,22 @@ def sym_normalize(AA):
         adj = sp.coo_matrix(AA[i])
         rowsum = np.array(adj.sum(1))
         d_inv_sqrt = np.power(rowsum, -0.5).flatten()
-        d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.
+        d_inv_sqrt[np.isinf(d_inv_sqrt)] = 0.0
         d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
         A_list.append(AA[i].dot(d_mat_inv_sqrt).transpose().dot(d_mat_inv_sqrt).tocoo())
     return A_list
+
 
 def row_normalize(AA):
     A_list = list()
     for i in range(len(AA)):
         d = np.array(AA[i].sum(1)).flatten()
-        d_inv = 1. / d
-        d_inv[np.isinf(d_inv)] = 0.
+        d_inv = 1.0 / d
+        d_inv[np.isinf(d_inv)] = 0.0
         D_inv = sp.diags(d_inv)
         A_list.append(D_inv.dot(AA[i]).tocsr())
     return A_list
+
 
 def accuracy(output, labels):
     preds = output.max(1)[1].type_as(labels)
