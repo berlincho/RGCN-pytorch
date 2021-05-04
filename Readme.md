@@ -9,7 +9,7 @@ The code for the *link prediction* task in [1] can be found in the following rep
 
 ### Environment
 - The implementation is supposed to train in the GPU enviornment. 
-- We test all of the datasets with RGCN on GeForce RTX 2080 Ti and CPU with 128GB RAM.
+- I test all of the datasets with RGCN on GeForce RTX 2080 Ti and CPU with 128GB RAM.
 
 ### Dataset:
 - RGCN use AIFB, MUTAG, and BGS as benchmark datasets for semi-supervised node classification.
@@ -30,11 +30,11 @@ python run.py --data mutag --epochs 50 --bases 30 --hidden 16 --lr 0.01 --l2 5e-
 
 - BGS: 
 ```shell
-python run.py --data bgs --epochs 50 --bases 40 --hidden 16 --lr 0.01 --l2 5e-4
+python run.py --data bgs --epochs 50 --bases 40 --hidden 16 --lr 0.01 --l2 5e-4 --no_cuda
 ```
 - AM:
 ```
-python run.py --data am --epochs 50 --bases 40 --hidden 10 --lr 0.01 --l2 5e-4
+python run.py --data am --epochs 50 --bases 40 --hidden 10 --lr 0.01 --l2 5e-4 --no_cuda
 ```
 Note: Results depend on random seed and will vary between re-runs.
 * `--bases` for RGCN basis decomposition
