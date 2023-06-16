@@ -300,7 +300,7 @@ def load_data(dataset_str="aifb", K=2, limit=-1):
                 adjacencies.append(load_sparse_csr(file))
                 print("%d adjacency matrices loaded " % i)
         nodes_u_dict = {
-            np.unicode(to_unicode(key)): val for key, val in nodes_dict.items()
+            np.unicode_(to_unicode(key)): val for key, val in nodes_dict.items()
         }
 
         labels_set = set(labels_df[label_header].values.tolist())
@@ -317,7 +317,7 @@ def load_data(dataset_str="aifb", K=2, limit=-1):
         for nod, lab in zip(
             labels_train_df[nodes_header].values, labels_train_df[label_header].values
         ):
-            nod = np.unicode(to_unicode(nod))  # type: unicode
+            nod = np.unicode_(to_unicode(nod))  # type: unicode
             if nod in nodes_u_dict:
                 labeled_nodes_idx.append(nodes_u_dict[nod])
                 label_idx = labels_dict[lab]
@@ -336,7 +336,7 @@ def load_data(dataset_str="aifb", K=2, limit=-1):
         for nod, lab in zip(
             labels_test_df[nodes_header].values, labels_test_df[label_header].values
         ):
-            nod = np.unicode(to_unicode(nod))
+            nod = np.unicode_(to_unicode(nod))
             if nod in nodes_u_dict:
                 labeled_nodes_idx.append(nodes_u_dict[nod])
                 label_idx = labels_dict[lab]
