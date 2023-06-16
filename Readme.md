@@ -4,12 +4,13 @@ Pytorch-based implementation of RGCN for semi-supervised node classification on 
 The code for the *link prediction* task in [1] can be found in the following repository: https://github.com/MichSchli/RelationPrediction
 
 ### Dependencies
-- Compatible with PyTorch 1.4.0 and Python 3.7.3.
+- Compatible with PyTorch 2.0.1 and Python 3.10.6.
 - Dependencies can be installed using `requirements.txt`.
 
 ### Environment
-- The implementation is supposed to train in the GPU enviornment. 
+- The implementation is supposed to train in the GPU environment. 
 - I test all of the datasets with RGCN on GeForce RTX 2080 Ti and CPU with 128GB RAM.
+- Also tested with GeForce 1070 Ti.
 
 ### Dataset:
 - RGCN use AIFB, MUTAG, and BGS as benchmark datasets for semi-supervised node classification.

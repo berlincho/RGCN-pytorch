@@ -105,3 +105,9 @@ ENV/
 #other
 scripts.txt
 .checkpoints/
+
+data/*.pickle
+data/*/*.npz
+data/*/*.gz
+data/*/*.pkl
+data/*/*.npy

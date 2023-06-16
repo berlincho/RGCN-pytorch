@@ -8,7 +8,7 @@ def csr_zero_rows(csr, rows_to_zero):
     """Set rows given by rows_to_zero in a sparse csr matrix to zero.
     NOTE: Inplace operation! Does not return a copy of sparse matrix."""
     rows, cols = csr.shape
-    mask = np.ones((rows,), dtype=np.bool)
+    mask = np.ones((rows,), dtype=np.bool_)
     mask[rows_to_zero] = False
     nnz_per_row = np.diff(csr.indptr)
 
